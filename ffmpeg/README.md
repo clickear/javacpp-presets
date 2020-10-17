@@ -51,6 +51,14 @@ We can use [Maven 3](http://maven.apache.org/) to download and install automatic
             <artifactId>ffmpeg-platform-gpl</artifactId>
             <version>4.3.1-1.5.5-SNAPSHOT</version>
         </dependency>
+        
+        
+        <!-- Optional GPL builds with (almost) everything enabled and gl-transition -->
+        <dependency>
+            <groupId>org.bytedeco</groupId>
+            <artifactId>ffmpeg-platform-gltransition</artifactId>
+            <version>4.3.1-1.5.5-SNAPSHOT</version>
+        </dependency>
     </dependencies>
     <build>
         <sourceDirectory>.</sourceDirectory>

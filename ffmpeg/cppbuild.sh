@@ -7,12 +7,19 @@ if [[ -z "$PLATFORM" ]]; then
     exit
 fi
 
+EXTEND_LIB=""
 DISABLE="--disable-iconv --disable-opencl --disable-sdl2 --disable-bzlib --disable-lzma --disable-linux-perf"
 ENABLE="--enable-shared --enable-version3 --enable-runtime-cpudetect --enable-zlib --enable-libmp3lame --enable-libspeex --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-libvo-amrwbenc --enable-openssl --enable-libopenh264 --enable-libvpx --enable-libfreetype --enable-libopus"
 
-if [[ "$EXTENSION" == *gpl ]]; then
+if [[ "$EXTENSION" == *gpl || "$EXTENSION" == *transition ]]; then
     # Enable GPL and nonfree modules
     ENABLE="$ENABLE --enable-gpl --enable-nonfree --enable-libx264 --enable-libx265"
+fi
+
+if [[ "$EXTENSION" == *transition ]]; then
+    # Enable GPL and nonfree modules
+    ENABLE="$ENABLE --enable-filter=gltransition"
+    EXTEND_LIB=" $EXTEND_LIB -lGLEW -lglfw "
 fi
 
 # minimal configuration to support MPEG-4 streams with H.264 and AAC as well as Motion JPEG
@@ -54,6 +61,10 @@ download https://github.com/lu-zero/mfx_dispatch/archive/$MFX_VERSION.tar.gz mfx
 download https://github.com/FFmpeg/nv-codec-headers/archive/n$NVCODEC_VERSION.tar.gz nv-codec-headers-$NVCODEC_VERSION.tar.gz
 download http://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.bz2 ffmpeg-$FFMPEG_VERSION.tar.bz2
 
+# add support glfw and glew for macos
+download https://github.com/glfw/glfw/archive/3.3.2.tar.gz glfw-3.3.2.tar.gz
+git clone https://github.com/Perlmint/glew-cmake glew-2.1.0
+
 mkdir -p $PLATFORM$EXTENSION
 cd $PLATFORM$EXTENSION
 INSTALL_PATH=`pwd`
@@ -74,6 +85,10 @@ tar --totals -xJf ../freetype-$FREETYPE_VERSION.tar.xz
 tar --totals -xzf ../mfx_dispatch-$MFX_VERSION.tar.gz
 tar --totals -xzf ../nv-codec-headers-$NVCODEC_VERSION.tar.gz
 tar --totals -xjf ../ffmpeg-$FFMPEG_VERSION.tar.bz2
+tar --totals -xzf ../glfw-3.3.2.tar.gz
+
+# download from github, so use copy
+cp -r ../glew-2.1.0 ./glew-2.1.0
 
 if [[ "${ACLOCAL_PATH:-}" == C:\\msys64\\* ]]; then
     export ACLOCAL_PATH=/mingw64/share/aclocal:/usr/share/aclocal
@@ -1164,7 +1179,7 @@ EOF
           CC="powerpc64le-linux-gnu-gcc" CXX="powerpc64le-linux-gnu-g++" ./configure --prefix=$INSTALL_PATH --with-bzip2=no --with-harfbuzz=no --with-png=no --enable-static --disable-shared --with-pic --host=powerpc64le-linux-gnu --build=ppc64le-linux CFLAGS="-m64"
         fi
         make -j $MAKEJ
-        make install 
+        make install
         cd ../ffmpeg-$FFMPEG_VERSION
         if [[ "$MACHINE_TYPE" =~ ppc64 ]]; then
           LDEXEFLAGS='-Wl,-rpath,\$$ORIGIN/' PKG_CONFIG_PATH=../lib/pkgconfig/ ./configure --prefix=.. $DISABLE $ENABLE --enable-pthreads --enable-libxcb --cc="gcc -m64" --extra-cflags="-I../include/" --extra-ldflags="-L../lib/" --extra-libs="-lstdc++ -ldl -lz -lm" --disable-altivec
@@ -1262,9 +1277,40 @@ EOF
         ./configure --prefix=$INSTALL_PATH --with-bzip2=no --with-harfbuzz=no --with-png=no --enable-static --disable-shared --with-pic
         make -j $MAKEJ
         make install
+
+        echo ""
+        echo "--------------------"
+        echo "Building glew"
+        echo "--------------------"
+        echo ""
+        cd ../glew-2.1.0
+        make
+        make install GLEW_PREFIX=$INSTALL_PATH GLEW_DEST=$INSTALL_PATH
+
+        echo ""
+        echo "--------------------"
+        echo "Building glfw"
+        echo "--------------------"
+        echo ""
+        cd ../glfw-3.3.2
+        cmake -DBUILD_SHARED_LIBS=ON CMAKE_INSTALL_PREFIX=$INSTALL_PATH .
+        make install
+
         cd ../ffmpeg-$FFMPEG_VERSION
         patch -Np1 < ../../../ffmpeg-macosx.patch
-        LDEXEFLAGS='-Wl,-rpath,@loader_path/' PKG_CONFIG_PATH=../lib/pkgconfig/ ./configure --prefix=.. $DISABLE $ENABLE --enable-pthreads --enable-indev=avfoundation --extra-cflags="-I../include/" --extra-ldflags="-L../lib/" --extra-libs="-lstdc++ -ldl -lz -lm"
+
+        echo ""
+        echo "--------------------"
+        echo "patch transition"
+        echo "--------------------"
+        echo ""
+        echo " patch transition "
+        git clone https://github.com/clofus/ffmpeg-gl.git
+
+        cp ffmpeg-gl/ffmpeg-gl-transition/vf_gltransition.c libavfilter/
+        git apply ffmpeg-gl/ffmpeg-gl-transition/ffmpeg.diff
+        LDEXEFLAGS='-Wl,-rpath,@loader_path/' PKG_CONFIG_PATH=../lib/pkgconfig/ ./configure --prefix=.. $DISABLE $ENABLE --enable-pthreads \
+        --enable-indev=avfoundation --extra-cflags="-I../include/" --extra-ldflags="-L../lib/" --extra-libs="-lstdc++ -ldl -lz -lm $EXTEND_LIB"
         make -j $MAKEJ
         make install
         ;;
@@ -1474,4 +1520,3 @@ EOF
 esac
 
 cd ../..
-
