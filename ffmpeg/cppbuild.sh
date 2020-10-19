@@ -10,9 +10,16 @@ fi
 DISABLE="--disable-iconv --disable-opencl --disable-sdl2 --disable-bzlib --disable-lzma --disable-linux-perf"
 ENABLE="--enable-shared --enable-version3 --enable-runtime-cpudetect --enable-zlib --enable-libmp3lame --enable-libspeex --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-libvo-amrwbenc --enable-openssl --enable-libopenh264 --enable-libvpx --enable-libfreetype --enable-libopus"
 
-if [[ "$EXTENSION" == *gpl ]]; then
+EXTEND_LIB=""
+if [[ "$EXTENSION" == *gpl || "$EXTENSION" == *gltransition ]]; then
     # Enable GPL and nonfree modules
     ENABLE="$ENABLE --enable-gpl --enable-nonfree --enable-libx264 --enable-libx265"
+fi
+
+if [[ "$EXTENSION" == *gltransition ]]; then
+    # Enable GPL and nonfree modules
+    ENABLE="$ENABLE --enable-filter=gltransition"
+    EXTEND_LIB=" $EXTEND_LIB -lGLEW -lglfw "
 fi
 
 # minimal configuration to support MPEG-4 streams with H.264 and AAC as well as Motion JPEG
@@ -36,6 +43,7 @@ FREETYPE_VERSION=2.10.2
 MFX_VERSION=1.25
 NVCODEC_VERSION=10.0.26.0
 FFMPEG_VERSION=4.3.1
+GLFW_VERSION=3.2.1
 download https://download.videolan.org/contrib/nasm/nasm-$NASM_VERSION.tar.gz nasm-$NASM_VERSION.tar.gz
 download http://zlib.net/$ZLIB.tar.gz $ZLIB.tar.gz
 download http://downloads.sourceforge.net/project/lame/lame/3.100/$LAME.tar.gz $LAME.tar.gz
@@ -52,7 +60,13 @@ download https://ftp.osuosl.org/pub/blfs/conglomeration/alsa-lib/alsa-lib-$ALSA_
 download https://ftp.osuosl.org/pub/blfs/conglomeration/freetype/freetype-$FREETYPE_VERSION.tar.xz freetype-$FREETYPE_VERSION.tar.xz
 download https://github.com/lu-zero/mfx_dispatch/archive/$MFX_VERSION.tar.gz mfx_dispatch-$MFX_VERSION.tar.gz
 download https://github.com/FFmpeg/nv-codec-headers/archive/n$NVCODEC_VERSION.tar.gz nv-codec-headers-$NVCODEC_VERSION.tar.gz
+download https://github.com/glfw/glfw/archive/$GLFW_VERSION.tar.gz glfw-$GLFW_VERSION.tar.gz
 download http://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.bz2 ffmpeg-$FFMPEG_VERSION.tar.bz2
+
+# from git use cmake
+if [[ ! -d "glew-2.1.0" ]] ; then
+    git clone https://github.com/Perlmint/glew-cmake glew-2.1.0
+fi
 
 mkdir -p $PLATFORM$EXTENSION
 cd $PLATFORM$EXTENSION
@@ -74,6 +88,11 @@ tar --totals -xJf ../freetype-$FREETYPE_VERSION.tar.xz
 tar --totals -xzf ../mfx_dispatch-$MFX_VERSION.tar.gz
 tar --totals -xzf ../nv-codec-headers-$NVCODEC_VERSION.tar.gz
 tar --totals -xjf ../ffmpeg-$FFMPEG_VERSION.tar.bz2
+
+tar --totals -xzf ../glfw_$GLFW_VERSION.tar.gz
+#
+cp -r ../glew-2.1.0 ./glew-2.1.0
+
 
 if [[ "${ACLOCAL_PATH:-}" == C:\\msys64\\* ]]; then
     export ACLOCAL_PATH=/mingw64/share/aclocal:/usr/share/aclocal
@@ -1265,6 +1284,31 @@ EOF
         cd ../ffmpeg-$FFMPEG_VERSION
         patch -Np1 < ../../../ffmpeg-macosx.patch
         LDEXEFLAGS='-Wl,-rpath,@loader_path/' PKG_CONFIG_PATH=../lib/pkgconfig/ ./configure --prefix=.. $DISABLE $ENABLE --enable-pthreads --enable-indev=avfoundation --extra-cflags="-I../include/" --extra-ldflags="-L../lib/" --extra-libs="-lstdc++ -ldl -lz -lm"
+
+        cd ../glfw-$GLFW_VERSION
+        cmake -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=.. .
+        make -j $MAKEJ
+        make install
+        install_name_tool -id "@rpath/libglfw.dylib" ../lib/libglfw.dylib
+
+        echo ""
+        echo "--------------------"
+        echo "Building glew"
+        echo "--------------------"
+        echo ""
+        cd ../glew-2.1.0
+        make  GLEW_PREFIX=$INSTALL_PATH GLEW_DEST=$INSTALL_PATH
+        make install GLEW_PREFIX=$INSTALL_PATH GLEW_DEST=$INSTALL_PATH
+        install_name_tool -id "@rpath/libGLEW.dylib" ../lib/libGLEW.dylib
+
+        cd ../ffmpeg-$FFMPEG_VERSION
+        patch -Np1 < ../../../ffmpeg-macosx.patch
+
+        cp ../../../vf_gltransition.c libavfilter/
+        patch -Np1 < ../../../gltransition.patch
+
+        # diff
+        LDEXEFLAGS='-Wl,-rpath,@loader_path/' PKG_CONFIG_PATH=../lib/pkgconfig/ ./configure --prefix=.. $DISABLE $ENABLE --enable-pthreads --enable-indev=avfoundation --extra-cflags="-I../include/" --extra-ldflags="-L../lib/" --extra-libs="-lstdc++ -ldl -lz -lm $EXTEND_LIB"
         make -j $MAKEJ
         make install
         ;;
