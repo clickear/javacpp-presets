@@ -89,7 +89,7 @@ tar --totals -xzf ../mfx_dispatch-$MFX_VERSION.tar.gz
 tar --totals -xzf ../nv-codec-headers-$NVCODEC_VERSION.tar.gz
 tar --totals -xjf ../ffmpeg-$FFMPEG_VERSION.tar.bz2
 
-tar --totals -xzf ../glfw_$GLFW_VERSION.tar.gz
+tar --totals -xzf ../glfw-$GLFW_VERSION.tar.gz
 #
 cp -r ../glew-2.1.0 ./glew-2.1.0
 
@@ -1281,9 +1281,6 @@ EOF
         ./configure --prefix=$INSTALL_PATH --with-bzip2=no --with-harfbuzz=no --with-png=no --enable-static --disable-shared --with-pic
         make -j $MAKEJ
         make install
-        cd ../ffmpeg-$FFMPEG_VERSION
-        patch -Np1 < ../../../ffmpeg-macosx.patch
-        LDEXEFLAGS='-Wl,-rpath,@loader_path/' PKG_CONFIG_PATH=../lib/pkgconfig/ ./configure --prefix=.. $DISABLE $ENABLE --enable-pthreads --enable-indev=avfoundation --extra-cflags="-I../include/" --extra-ldflags="-L../lib/" --extra-libs="-lstdc++ -ldl -lz -lm"
 
         cd ../glfw-$GLFW_VERSION
         cmake -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=.. .

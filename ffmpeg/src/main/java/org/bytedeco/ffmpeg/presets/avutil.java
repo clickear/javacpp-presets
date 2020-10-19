@@ -61,7 +61,8 @@ import org.bytedeco.javacpp.tools.InfoMapper;
             includepath = {"/usr/local/include/ffmpeg/", "/opt/local/include/ffmpeg/", "/usr/include/ffmpeg/"},
             link = "avutil@.56", compiler = {"default", "nodeprecated"}),
         @Platform(value = "windows", includepath = {"C:/MinGW/local/include/ffmpeg/", "C:/MinGW/include/ffmpeg/"}, preload = "avutil-56"),
-        @Platform(extension = "-gpl")
+        @Platform(extension = {"-gpl","-gltransition"}),
+        @Platform(value = "mac", extension = {"-gpl","-gltransition"},preload = {"glfw","GLEW"})
     }
 )
 public class avutil implements InfoMapper {
