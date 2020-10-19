@@ -7,16 +7,16 @@ if [[ -z "$PLATFORM" ]]; then
     exit
 fi
 
-EXTEND_LIB=""
 DISABLE="--disable-iconv --disable-opencl --disable-sdl2 --disable-bzlib --disable-lzma --disable-linux-perf"
 ENABLE="--enable-shared --enable-version3 --enable-runtime-cpudetect --enable-zlib --enable-libmp3lame --enable-libspeex --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-libvo-amrwbenc --enable-openssl --enable-libopenh264 --enable-libvpx --enable-libfreetype --enable-libopus"
 
-if [[ "$EXTENSION" == *gpl || "$EXTENSION" == *transition ]]; then
+EXTEND_LIB=""
+if [[ "$EXTENSION" == *gpl || "$EXTENSION" == *gltransition ]]; then
     # Enable GPL and nonfree modules
     ENABLE="$ENABLE --enable-gpl --enable-nonfree --enable-libx264 --enable-libx265"
 fi
 
-if [[ "$EXTENSION" == *transition ]]; then
+if [[ "$EXTENSION" == *gltransition ]]; then
     # Enable GPL and nonfree modules
     ENABLE="$ENABLE --enable-filter=gltransition"
     EXTEND_LIB=" $EXTEND_LIB -lGLEW -lglfw "
@@ -43,6 +43,7 @@ FREETYPE_VERSION=2.10.2
 MFX_VERSION=1.25
 NVCODEC_VERSION=10.0.26.0
 FFMPEG_VERSION=4.3.1
+GLFW_VERSION=3.2.1
 download https://download.videolan.org/contrib/nasm/nasm-$NASM_VERSION.tar.gz nasm-$NASM_VERSION.tar.gz
 download http://zlib.net/$ZLIB.tar.gz $ZLIB.tar.gz
 download http://downloads.sourceforge.net/project/lame/lame/3.100/$LAME.tar.gz $LAME.tar.gz
@@ -59,11 +60,13 @@ download https://ftp.osuosl.org/pub/blfs/conglomeration/alsa-lib/alsa-lib-$ALSA_
 download https://ftp.osuosl.org/pub/blfs/conglomeration/freetype/freetype-$FREETYPE_VERSION.tar.xz freetype-$FREETYPE_VERSION.tar.xz
 download https://github.com/lu-zero/mfx_dispatch/archive/$MFX_VERSION.tar.gz mfx_dispatch-$MFX_VERSION.tar.gz
 download https://github.com/FFmpeg/nv-codec-headers/archive/n$NVCODEC_VERSION.tar.gz nv-codec-headers-$NVCODEC_VERSION.tar.gz
+download https://github.com/glfw/glfw/archive/$GLFW_VERSION.tar.gz glfw-$GLFW_VERSION.tar.gz
 download http://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.bz2 ffmpeg-$FFMPEG_VERSION.tar.bz2
 
-# add support glfw and glew for macos
-download https://github.com/glfw/glfw/archive/3.3.2.tar.gz glfw-3.3.2.tar.gz
-git clone https://github.com/Perlmint/glew-cmake glew-2.1.0
+# from git use cmake
+if [[ ! -d "glew-2.1.0" ]] ; then
+    git clone https://github.com/Perlmint/glew-cmake glew-2.1.0
+fi
 
 mkdir -p $PLATFORM$EXTENSION
 cd $PLATFORM$EXTENSION
@@ -85,10 +88,11 @@ tar --totals -xJf ../freetype-$FREETYPE_VERSION.tar.xz
 tar --totals -xzf ../mfx_dispatch-$MFX_VERSION.tar.gz
 tar --totals -xzf ../nv-codec-headers-$NVCODEC_VERSION.tar.gz
 tar --totals -xjf ../ffmpeg-$FFMPEG_VERSION.tar.bz2
-tar --totals -xzf ../glfw-3.3.2.tar.gz
 
-# download from github, so use copy
+tar --totals -xzf ../glfw-$GLFW_VERSION.tar.gz
+#
 cp -r ../glew-2.1.0 ./glew-2.1.0
+
 
 if [[ "${ACLOCAL_PATH:-}" == C:\\msys64\\* ]]; then
     export ACLOCAL_PATH=/mingw64/share/aclocal:/usr/share/aclocal
@@ -1179,7 +1183,7 @@ EOF
           CC="powerpc64le-linux-gnu-gcc" CXX="powerpc64le-linux-gnu-g++" ./configure --prefix=$INSTALL_PATH --with-bzip2=no --with-harfbuzz=no --with-png=no --enable-static --disable-shared --with-pic --host=powerpc64le-linux-gnu --build=ppc64le-linux CFLAGS="-m64"
         fi
         make -j $MAKEJ
-        make install
+        make install 
         cd ../ffmpeg-$FFMPEG_VERSION
         if [[ "$MACHINE_TYPE" =~ ppc64 ]]; then
           LDEXEFLAGS='-Wl,-rpath,\$$ORIGIN/' PKG_CONFIG_PATH=../lib/pkgconfig/ ./configure --prefix=.. $DISABLE $ENABLE --enable-pthreads --enable-libxcb --cc="gcc -m64" --extra-cflags="-I../include/" --extra-ldflags="-L../lib/" --extra-libs="-lstdc++ -ldl -lz -lm" --disable-altivec
@@ -1278,39 +1282,30 @@ EOF
         make -j $MAKEJ
         make install
 
+        cd ../glfw-$GLFW_VERSION
+        cmake -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=.. .
+        make -j $MAKEJ
+        make install
+        install_name_tool -id "@rpath/libglfw.dylib" ../lib/libglfw.dylib
+
         echo ""
         echo "--------------------"
         echo "Building glew"
         echo "--------------------"
         echo ""
         cd ../glew-2.1.0
-        make
+        make  GLEW_PREFIX=$INSTALL_PATH GLEW_DEST=$INSTALL_PATH
         make install GLEW_PREFIX=$INSTALL_PATH GLEW_DEST=$INSTALL_PATH
-
-        echo ""
-        echo "--------------------"
-        echo "Building glfw"
-        echo "--------------------"
-        echo ""
-        cd ../glfw-3.3.2
-        cmake -DBUILD_SHARED_LIBS=ON CMAKE_INSTALL_PREFIX=$INSTALL_PATH .
-        make install
+        install_name_tool -id "@rpath/libGLEW.dylib" ../lib/libGLEW.dylib
 
         cd ../ffmpeg-$FFMPEG_VERSION
         patch -Np1 < ../../../ffmpeg-macosx.patch
 
-        echo ""
-        echo "--------------------"
-        echo "patch transition"
-        echo "--------------------"
-        echo ""
-        echo " patch transition "
-        git clone https://github.com/clofus/ffmpeg-gl.git
+        cp ../../../vf_gltransition.c libavfilter/
+        patch -Np1 < ../../../gltransition.patch
 
-        cp ffmpeg-gl/ffmpeg-gl-transition/vf_gltransition.c libavfilter/
-        git apply ffmpeg-gl/ffmpeg-gl-transition/ffmpeg.diff
-        LDEXEFLAGS='-Wl,-rpath,@loader_path/' PKG_CONFIG_PATH=../lib/pkgconfig/ ./configure --prefix=.. $DISABLE $ENABLE --enable-pthreads \
-        --enable-indev=avfoundation --extra-cflags="-I../include/" --extra-ldflags="-L../lib/" --extra-libs="-lstdc++ -ldl -lz -lm $EXTEND_LIB"
+        # diff
+        LDEXEFLAGS='-Wl,-rpath,@loader_path/' PKG_CONFIG_PATH=../lib/pkgconfig/ ./configure --prefix=.. $DISABLE $ENABLE --enable-pthreads --enable-indev=avfoundation --extra-cflags="-I../include/" --extra-ldflags="-L../lib/" --extra-libs="-lstdc++ -ldl -lz -lm $EXTEND_LIB"
         make -j $MAKEJ
         make install
         ;;
@@ -1520,3 +1515,4 @@ EOF
 esac
 
 cd ../..
+
