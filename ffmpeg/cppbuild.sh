@@ -770,8 +770,26 @@ EOF
         fi
         cd ../nv-codec-headers-n$NVCODEC_VERSION
         make install PREFIX=$INSTALL_PATH
+
+        cd ../glfw-$GLFW_VERSION
+        cmake -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=.. .
+        make -j $MAKEJ
+        make install
+
+        echo ""
+        echo "--------------------"
+        echo "Building glew"
+        echo "--------------------"
+        echo ""
+        cd ../glew-2.1.0
+        make  GLEW_PREFIX=$INSTALL_PATH GLEW_DEST=$INSTALL_PATH
+        make install GLEW_PREFIX=$INSTALL_PATH GLEW_DEST=$INSTALL_PATH
+
         cd ../ffmpeg-$FFMPEG_VERSION
-        LDEXEFLAGS='-Wl,-rpath,\$$ORIGIN/' PKG_CONFIG_PATH=../lib/pkgconfig/ ./configure --prefix=.. $DISABLE $ENABLE --enable-cuda --enable-cuvid --enable-nvenc --enable-pthreads --enable-libxcb --cc="gcc -m64" --extra-cflags="-I../include/" --extra-ldflags="-L../lib/" --extra-libs="-lstdc++ -lpthread -ldl -lz -lm $LIBS"
+        cp ../../../vf_gltransition.c libavfilter/
+        patch -Np1 < ../../../gltransition.patch
+
+        LDEXEFLAGS='-Wl,-rpath,\$$ORIGIN/' PKG_CONFIG_PATH=../lib/pkgconfig/ ./configure --prefix=.. $DISABLE $ENABLE --enable-cuda --enable-cuvid --enable-nvenc --enable-pthreads --enable-libxcb --cc="gcc -m64" --extra-cflags="-I../include/" --extra-ldflags="-L../lib/" --extra-libs="-lstdc++ -lpthread -ldl -lz -lm $LIBS $EXTEND_LIB"
         make -j $MAKEJ
         make install
         ;;
@@ -1183,7 +1201,22 @@ EOF
           CC="powerpc64le-linux-gnu-gcc" CXX="powerpc64le-linux-gnu-g++" ./configure --prefix=$INSTALL_PATH --with-bzip2=no --with-harfbuzz=no --with-png=no --enable-static --disable-shared --with-pic --host=powerpc64le-linux-gnu --build=ppc64le-linux CFLAGS="-m64"
         fi
         make -j $MAKEJ
-        make install 
+        make install
+
+        cd ../glfw-$GLFW_VERSION
+        cmake -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=.. .
+        make -j $MAKEJ
+        make install
+
+        echo ""
+        echo "--------------------"
+        echo "Building glew"
+        echo "--------------------"
+        echo ""
+        cd ../glew-2.1.0
+        make  GLEW_PREFIX=$INSTALL_PATH GLEW_DEST=$INSTALL_PATH
+        make install GLEW_PREFIX=$INSTALL_PATH GLEW_DEST=$INSTALL_PATH
+
         cd ../ffmpeg-$FFMPEG_VERSION
         if [[ "$MACHINE_TYPE" =~ ppc64 ]]; then
           LDEXEFLAGS='-Wl,-rpath,\$$ORIGIN/' PKG_CONFIG_PATH=../lib/pkgconfig/ ./configure --prefix=.. $DISABLE $ENABLE --enable-pthreads --enable-libxcb --cc="gcc -m64" --extra-cflags="-I../include/" --extra-ldflags="-L../lib/" --extra-libs="-lstdc++ -ldl -lz -lm" --disable-altivec
